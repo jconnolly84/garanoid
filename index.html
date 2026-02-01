@@ -133,7 +133,7 @@
       display:grid;
       place-items:center;
       padding:16px;
-      pointer-events:none;
+      pointer-events:auto;
     }
     .card{
       pointer-events:auto;
@@ -176,6 +176,19 @@
       box-shadow:none;
     }
     button:active{transform:translateY(1px)}
+
+    .miniBtn{
+      padding:4px 10px;
+      border-radius:999px;
+      font-size:12px;
+      font-weight:800;
+      letter-spacing:.3px;
+      border:1px solid rgba(255,255,255,.14);
+      background: rgba(255,255,255,.06);
+      color: var(--text);
+      cursor:pointer;
+    }
+    .miniBtn:active{transform:translateY(1px)}
 
     .tiny{
       margin-top:10px;
@@ -233,6 +246,7 @@
           <span class="kbd">A</span><span class="kbd">D</span>
           <span class="kbd">Space</span> <span class="kbd">Right-click</span> <span class="kbd">Tap</span>
         </div>
+        <div class="pill">Input: <button id="controlModeBtn" class="miniBtn" type="button">Auto</button></div>
       </div>
     </header>
 
@@ -280,6 +294,8 @@
   const menuCard = document.getElementById("menuCard");
   const btnStart = document.getElementById("btnStart");
   const btnPractice = document.getElementById("btnPractice");
+  const controlModeBtn = document.getElementById("controlModeBtn");
+
 
   // ====== Utility ======
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -599,6 +615,23 @@
   let pointerActive = false;          // touch drag active
   let pointerHover = false;           // mouse over canvas
   let pointerTargetX = canvas.width / 2;
+
+  // Control mode: auto (both), keys only, pointer only
+  let controlMode = "auto";
+  function setControlMode(mode){
+    controlMode = mode;
+    if (controlModeBtn) controlModeBtn.textContent = (mode === "auto" ? "Auto" : (mode === "keys" ? "Keys" : "Pointer"));
+  }
+  if (controlModeBtn){
+    controlModeBtn.addEventListener("click", () => {
+      if (typeof ensureAudio === 'function') ensureAudio();
+      const next = (controlMode === "auto") ? "keys" : (controlMode === "keys" ? "pointer" : "auto");
+      setControlMode(next);
+      // a tiny click sound if available
+      if (sfx && typeof sfx.pause === 'function') sfx.pause();
+    });
+  }
+  setControlMode("auto");;
 
   function setPointerTargetFromEvent(e){
     const rect = canvas.getBoundingClientRect();
@@ -938,26 +971,32 @@
     last = ts;
     time += dt;
 
-    const left = keys.has("ArrowLeft") || keys.has("KeyA");
-    const right = keys.has("ArrowRight") || keys.has("KeyD");
-    let dir = 0;
-    if (left) dir -= 1;
-    if (right) dir += 1;
 
     if (running && !paused){
       const levelFactor = (level - 1);
       const paddleSpeed = paddle.speed * (practiceMode ? 0.95 : 1.0);
 
       // If mouse is hovering over the canvas OR touch drag is active, follow the pointer target.
-      // Otherwise use keyboard.
-      const usingPointer = pointerHover || pointerActive;
+      // Keyboard always works too: if keys are pressed, they take priority in Auto mode.
+      const pointerAvailable = pointerHover || pointerActive;
+
+      const left = keys.has("ArrowLeft") || keys.has("KeyA");
+      const right = keys.has("ArrowRight") || keys.has("KeyD");
+      const keysPressed = left || right;
+
+      let usingPointer = false;
+      if (controlMode === "pointer") usingPointer = pointerAvailable;
+      else if (controlMode === "keys") usingPointer = false;
+      else usingPointer = pointerAvailable && !keysPressed; // auto
 
       if (usingPointer){
         const desiredX = pointerTargetX - paddle.w / 2;
-        // Smooth follow so it feels nice
         const follow = 18; // higher = snappier
         paddle.x += (desiredX - paddle.x) * (1 - Math.exp(-follow * dt));
       } else {
+        let dir = 0;
+        if (left) dir -= 1;
+        if (right) dir += 1;
         paddle.vx = dir * paddleSpeed;
         paddle.x += paddle.vx * dt;
       }
